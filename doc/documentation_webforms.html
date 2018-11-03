@@ -1,0 +1,1171 @@
+<html>
+<title>Documentation: WebForms</title>
+<link rel="stylesheet" href="documentation.css">
+<p class="title">WebForms User&acute;s Guide</p>
+<p class="subtitle">Contents</p>
+<ol>
+<li><a href="#purposes">Purposes of the Packages</a></li>
+<li><a href="#encoders">Encoders Package</a></li>
+<li><a href="#webforms">WebForms Package 101</a></li>
+<li><a href="#iwebpage">WebForms - the IWebPage interface</a></li>
+<li><a href="#iwebelement">WebForms - the IWebElement interface </a> 
+<ol>
+<li><a href="#button">Button</a></li>
+<li><a href="#label">Label</a></li>
+<li><a href="#textbox">TextBox</a></li>
+<li><a href="#dropdownlist">DropDownList</a></li>
+<li><a href="#list">List</a></li>
+<li><a href="#fileupload">FileUpload</a></li>
+<li><a href="#image">Image</a></li>
+<li><a href="#hidden">Hidden</a></li>
+</ol>
+</li>
+<li><a href="#ivalidatorcontainer">WebForms - the IValidatorContainer interface</a></li>
+<li><a href="#ivalidator">WebForms - the IValidator interface </a> 
+<ol>
+<li><a href="#validatorrequired">ValidatorRequired</a></li>
+<li><a href="#validatorcompare">ValidatorCompare</a></li>
+<li><a href="#validatorregularexpression">ValidatorRegularExpression</a></li>
+</ol>
+</li>
+<li><a href="#disclaimer">Disclaimer</a></li>
+</ol>
+<p class="subtitle"><a name="purposes"></a>Purposes of the packages</p>
+<p>The release of the new <a href="http://msdn.microsoft.com/library/default.asp?url=/nhp/Default.asp?contentid=28000451">Microsoft.NET</a> 
+framework and the <a href="http://www.asp.net">ASP.NET</a> brings a new level 
+of productivity by finally having a native-compiled, managed environment for programming 
+ASP-based web applications. Now the <i>de facto </i>web language is C# and most 
+of the usual behaviors that we see in real world web development scenarios are 
+encapsulated in very well designed core components. One of the key component set 
+is the System.Web.UI.WebForms package that allows for a developer to think about 
+programming a web page in the same way he would program a Windows Application. 
+Every one that큦 used to use RAD tools like Visual Basic or Delphi knows the impact of 
+having a solid set of components that encapsulates widgets as buttons, drop down 
+lists and the way they separate the visual behavior and the event handling code.</p>
+<p>The bottom line is that some of these features could exist in today ASP 2.0/3.0 
+environments. That&acute;s the purpose of this package called &quot;WebForms&quot;: 
+to mimic a fraction of the .NET original set.</p>
+<p>The 2 packages that make this work is the &quot;Encoders&quot; and &quot;WebForms&quot;, 
+both were coded using Windows Script Component (WSC) framework -- which means: 
+coded using VBScript and ASP built-in components and wrapped in a XML envelope 
+that exposes it&acute;s interface as COM components that runs in the level of 
+the MTS. The source codes are located at the /psn/wsc/ folder. Both packages were 
+designed with the Pattern of a Factory, which means that they return a &quot;factory&quot; 
+when instantiated and this &quot;factory&quot; has the ability to instantiate 
+the really functional objects.</p>
+<p>A complete working example can be viewed here: <a href="http://200.190.31.214/base/webformdemo.asp" target="_blank">http://200.190.31.214/base/webformdemo.asp</a></p>
+<p>&nbsp;</p>
+<p class="subtitle"><a name="encoders"></a>Encoders package</p>
+<p>This component encapsulates a set of general-use encoders. There will have 
+more in the future but the initial set includes a Base64 encode/decode algorithm 
+and an MD5 hash digest generator.</p>
+<p>You can instantiate the factory this way:</p>
+<p class="code">Set encoderFactory = Server.CreateObject( &quot;Encoders&quot; 
+)</p>
+<p>Then you can use the factory to instantiate each of the encoders this way:</p>
+<p class="code">Set objMD5 = encoderFactory.CreateInstance( &quot;MD5&quot; )<br>
+Set objBase64 = encoderFactory.CreateInstance( &quot;Base64&quot; )</p>
+<p>And finally use them:</p>
+<p class="code">strEncoded = objBase64.Encode( &quot;teste&quot; )<br>
+strDecoded = objBase64.Decode( strEncoded )</p>
+<p class="code">strDigest = objMD5.MakeDigest( &quot;teste&quot; )</p>
+<p class="code">&nbsp;</p>
+<p class="subtitle"><a name="webforms"></a>WebForms package 101</p>
+<p>This is a very large set of objects. You can instantiate it as a factory this 
+way:</p>
+<p class="code">Set WebFormsFactory = Server.CreateObject( &quot;WebForms&quot; 
+)</p>
+<p>Actually this factory holds the components that are part of a bigger framework. 
+Let me try to explain how this model works by rendering a very simple example:</p>
+<p>Example 1: (<a href="../demo/example1.asp" target="_blank">click here for a working example</a>)</p>
+<pre>&lt;%
+' (1) Create the factory
+Set WebFormsFactory = Server.CreateObject( &quot;WebForms&quot; )
+
+' (2) Create the Form objects
+With WebFormsFactory
+	Set Page1 = .CreateInstance( &quot;Page&quot; )
+	Set Button1 = .CreateInstance( &quot;Button&quot; )
+	Set TextBox1 = .CreateInstance( &quot;TextBox&quot; )
+	Set DropDownList1 = .CreateInstance( &quot;DropDownList&quot; )
+	Set Validator1 = .CreateInstance( &quot;ValidatorRequired&quot; )
+End With
+
+' (3) Initialize the Page1 container and add the other elements to it
+With Page1
+	.FormName = &quot;Form1&quot;
+	.MD5Path = "../wsc/md5.js"
+	.Add Button1, &quot;button1&quot;
+	.Add TextBox1, &quot;textbox1&quot;
+	.Add DropDownList1, &quot;dropdownlist1&quot;
+
+	' set event handlers to be raised on the initialization of the Page
+	.OnInit = GetRef( &quot;Page1_OnInit&quot; )
+	.OnLoad = GetRef( "Page1_OnLoad" )
+
+	.Validator = WebFormsFactory.CreateInstance( &quot;ValidatorContainer&quot; )
+	.Validator.IsClientSided = True
+	.Validator.Add Validator1
+
+	' loads the form data and trigger events
+	.Load
+
+	' render the header of the Form
+	.RenderBegin
+End With
+
+' (4) event handler for the Page OnInit
+Sub Page1_OnInit
+	Button1.Value = &quot;OK&quot;
+	Button1.OnClick = GetRef( &quot;Button1_OnClick&quot; )
+
+	TextBox1.Value = &quot;&quot;
+
+	Validator1.Control = TextBox1
+	Validator1.ErrorMessage = &quot;Don&acute;t leave the field empty&quot;
+End Sub
+
+' (5) event handler for the Page OnLoad
+Sub Page1_OnLoad
+	If Not Page1.IsPostBack Then
+		With DropDownList1.Items
+			.Add &quot;item1&quot;, &quot;value1&quot;
+			.Add &quot;item2&quot;, &quot;value2&quot;
+			.Add &quot;item3&quot;, &quot;value3&quot;
+			.Add &quot;item4&quot;, &quot;value4&quot;
+		End With
+	End If
+End Sub
+
+' (6) event handler for the Button OnClick
+Sub Button1_OnClick( sender, arguments )
+	Randomize
+	Button1.Value = &quot;Hello World&quot;
+	DropDownList1.Items.Add &quot;item&quot; &amp; Rnd * Second( Now ), &quot;value&quot; &amp; Rnd * Second( Now )
+End Sub
+
+' (7) now render the HTML (try not to render nothing between the
+' statements above and this part of the framework
+%&gt;
+&lt;table&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;%Validator1.Render%&gt;&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;%TextBox1.Render%&gt;&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;%DropDownList1.Render%&gt;&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;%Button1.Render%&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+&lt;%
+' (8) now render the end of the form and clean up memory
+Page1.RenderEnd
+Set WebFormsFactory = Nothing
+%&gt;
+</pre>
+<P>First of all, what&acute;s the meaning of it? The most important part is that 
+this is a very clean way to totally separate all the logic of the code and the 
+design presentation. If you have previous experience with Windows programming 
+using classic RAD IDEs like Delphi or even Visual Basic then this code will look 
+very familiar with the usual way of putting logic into a Windows Form. To see 
+the exact difference let&acute;s see how the above code would be in traditional 
+ASP programming:</p>
+<P>Example 2:</p>
+<pre>
+&lt;%
+strLabel = &quot;OK&quot;
+If Not IsEmpty( Request( &quot;submit&quot; ) ) Then
+	strLabel = &quot;Hello World&quot;
+End If
+%&gt;
+&lt;form action=&quot;test.asp&quot; method=&quot;POST&quot;&gt;
+&lt;table&gt;
+	&lt;tr&gt;&lt;td&gt;
+	&lt;%
+	If Not IsEmpty( Request( &quot;submit&quot; ) ) and IsEmpty( Request( &quot;text1&quot; ) ) Then
+	%&gt;
+	Don&acute;t leave the field empty
+	&lt;%
+	End If
+	%&gt;
+	&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;input type=&quot;text&quot; name=&quot;text1&quot;&gt;&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;
+		&lt;select name=&quot;dropdownlist1&quot;&gt;
+			&lt;option value=&quot;value1&quot;&gt;item1&lt;/option&gt;
+			&lt;option value=&quot;value2&quot;&gt;item2&lt;/option&gt;
+			&lt;option value=&quot;value3&quot;&gt;item3&lt;/option&gt;
+			&lt;option value=&quot;value4&quot;&gt;item4&lt;/option&gt;
+			&lt;%
+			If strLabel &lt;&gt; &quot;OK&quot; Then
+			%&gt;
+			&lt;option value=&quot;value5&quot;&gt;item5&lt;/option&gt;
+			&lt;%
+			End If
+			%&gt;
+		&lt;/select&gt;
+	&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;input type=&quot;submit&quot; value=&quot;&lt;%=strLabel%&gt;&quot;&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/form&gt;
+</pre>
+<p>You will notice that there&acute;s something missing here. In the first example 
+you can see that the Button1 component holds an event handler that changes the 
+Label1 value to &quot;Hello World&quot; and adds a new item to a drop down list. 
+The second example can do this once but it will not hold every new item created 
+thru successive clicks in the submit button, the list will have a maximum of 5 
+items. That&acute;s because a very simple page like this can&acute;t hold it&acute;s 
+own state thru more than one submit without some extra support code. You will 
+be amazed to notice that the first example do holds it&acute;s state and all the 
+new items that are created and you don&acute;t have to worry about no support 
+code because all the infra structure is already implemented and encapsulated in 
+the Page component.</p>
+<p>That&acute;s the elegance of this kind of model: there are situations that 
+becomes repetitive thru time. Every repetitive task can be optimized and hidden 
+in Design Patterns and Frameworks, the 2 columns that closely defines Software 
+Engineering. </p>
+<p>Now let&acute;s go step-by-step thru the first example:</p>
+<ol>
+<li>First of all, we create the Factory;</li>
+<li>Now we use the Factory to instantiate every widget that we&acute;ll need. 
+One requirement is that there has to be a unique Page widget, which means one 
+and only one Page object;</li>
+<li>Now we configure the Page element and associate the other element to it&acute;s 
+queue of elements thru the &quot;Add&quot; method. Notice that every added element 
+has to have a unique name. For example, the Button1 element is named &quot;button1&quot;.<br>
+In this stage we also can define non-required event handlers for the On Load and 
+On Init events of the Page object. It is a good programming practice to have all 
+the element configurations inside a method that is called in the OnInit event 
+and all data related programming should go in a OnLoad event. After all this, 
+you can call the RenderBegin method of the Page, this method will start the HTML 
+form so it has to be the last command to be called prior to any Element renderization 
+method; </li>
+<li>Here we create the procedure that is bind to the Page OnInit event. It configures 
+all the elements;</li>
+<li>And here&acute;s the procedure that is bind to the Page OnLoad event. As this 
+is a place to put data related programming we can use it to populate the Drop 
+Down list. You will notice that we only need to do this one in the application 
+life-cycle. That&acute;s why we only populate it if it&acute;s not a Post Back, 
+which means, it is not a call made after the user submitted the page. The list 
+will be populated only in the first call of this page and it&acute;s data will 
+be managed thru the Page&acute;s state manager (more on state later);</li>
+<li>Notice that the button can have a On Click event and here we have it&acute;s 
+separated event handler. A good naming convention is to use the element&acute;s 
+name followed by the event it&acute;s handling, in this case &quot;Button1_OnClick&quot;. 
+Every event handler receives the element name and an undefined argument (more 
+on events later);</li>
+<li>And finally we can render the HTML in any way we want. The tricky is to put 
+commands as Button1.Render (&lt;element&gt;.Render) in the place we want the elements 
+to show up: the elements will do the rest of the job and render themselves in 
+the correct ways;</li>
+<li>The last thing to be done is to call the RenderEnd method of the Page. It 
+will terminate the HTML Form. And finally, don&acute;t forget to clean up the 
+Factory. All the other elements will vanish properly after that.</li>
+</ol>
+<p>If you do it correctly, you don&acute;t need to worry about anything but to 
+solve your problem. All the dirty job of handling state between submits, file 
+uploads, client and server side field validations, etc. The previous example will 
+render the following HTML page when you call it:</p>
+<p>Example 3:</p>
+<pre>
+
+
+&lt;script language=&quot;javascript&quot; src=&quot;../wsc/md5.js&quot;&gt;&lt;/script&gt;
+
+&lt;script language=&quot;javascript&quot;&gt;&lt;!--
+var __IsPosting = false; // flag to avoid double-posting commands
+var __arrValidators = new Array(); 
+function _doSubmit() { 
+	if ( __IsPosting ) { return false } 
+	__IsPosting = true; 
+	var boolReturn = true; 
+	if ( __arrValidators.length &gt; 0 ) { 
+		for ( var i = 0; i &lt; __arrValidators.length; i++ ) { 
+			boolReturn = boolReturn &amp;&amp; eval( __arrValidators[ i ] ); 
+		} 
+	}
+	if ( boolReturn ) { 
+		_hashPassword(); 
+		Form1.submit(); 
+	} else { 
+		__IsPosting = false;
+	} 
+	return false; 
+} 
+
+function _hashPassword() { 
+	if ( ! MD5 ) { 
+		return;
+	} 
+	var strUsername = ''; 
+	if ( Form1.username ) { 
+		strUsername = Form1.username.value + ':'; 
+	} 
+	for( var i = 0; i &lt; Form1.elements.length; i++ ) { 
+		if ( Form1.elements[ i ].type == 'password' ) { 
+			strHash = MD5( strUsername + MD5( Form1.elements[ i ].value ) + ':' + Form1._CHALLENGE.value ); 
+			Form1.elements[ i ].value = strHash; 
+		} 
+	} 
+} 
+
+function _doPostBack( element, args ) { 
+	Form1._EVENTTARGET.value = element; 
+	Form1._EVENTARGS.value = args; 
+	_doSubmit(); 
+} 
+//--&gt;&lt;/script&gt;
+&lt;form id=&quot;Form1&quot; name=&quot;Form1&quot; method=&quot;POST&quot; action=&quot;/frameworks/demo/example1.asp&quot;  onsubmit=&quot;return _doSubmit()&quot;&gt;
+&lt;input type=&quot;hidden&quot; id=&quot;_VIEWSTATE&quot; name=&quot;_VIEWSTATE&quot; value=&quot;YnV0dG9uMSZuYW1lPWJ1dHRvbjEmdmFsdWU9T0smc3R5bGU9JmNsYXNzPSZ2aXNpYmxlPVRydWU8YnIgLz50ZXh0Ym94MSZuYW1lPXRleHRib3gxJnZhbHVlPXRlc3RlJm1heGxlbmd0aD0wJnN0eWxlPSZjbGFzcz0mcm93cz0xJmNvbHM9MTUmdmlzaWJsZT1UcnVlPGJyIC8+ZHJvcGRvd25saXN0MSZuYW1lPWRyb3Bkb3dubGlzdDEmdmFsdWU9JnN0eWxlPSZjbGFzcz0mdmlzaWJsZT1UcnVlJm11bHRpcGxlPUZhbHNlJnJvd3M9MSZsaXN0PWl0ZW0xJTQwJTIzJTQwdmFsdWUxJTIzJTQwJTIzaXRlbTIlNDAlMjMlNDB2YWx1ZTIlMjMlNDAlMjNpdGVtMyU0MCUyMyU0MHZhbHVlMyUyMyU0MCUyM2l0ZW00JTQwJTIzJTQwdmFsdWU0JTIzJTQwJTIzaXRlbTExJTJFNzUwNDMlNDAlMjMlNDB2YWx1ZTExJTJFODk5NzclMjMlNDAlMjNpdGVtMTElMkUyOTk3NCU0MCUyMyU0MHZhbHVlMTElMkU5OTg5MyUyMyU0MCUyM2l0ZW0xNCUyRTE4ODM0JTQwJTIzJTQwdmFsdWU4JTJFNTE3NzA4JTIzJTQwJTIzaXRlbTE1JTJFODA2NDklNDAlMjMlNDB2YWx1ZTIzJTJFOTEwMzIlMjMlNDAlMjNpdGVtNCUyRTE1NDQzOSU0MCUyMyU0MHZhbHVlMjUlMkU0MjYwNTxiciAvPiZuYW1lPUZvcm0xJnBhdGg9dW5kZWZpbmVkJmhpZGVwd2Q9VHJ1ZSZlbmNvZGU9&quot;&gt;
+&lt;input type=&quot;hidden&quot; id=&quot;_EVENTTARGET&quot; name=&quot;_EVENTTARGET&quot;&gt;
+&lt;input type=&quot;hidden&quot; id=&quot;_EVENTARGS&quot; name=&quot;_EVENTARGS&quot;&gt;
+&lt;input type=&quot;hidden&quot; id=&quot;_CHALLENGE&quot; name=&quot;_CHALLENGE&quot; value=&quot;4452&quot;&gt;
+
+&lt;table&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;script language=&quot;javascript&quot;&gt;
+function __ValidatorRequired_textbox1() 
+{ 
+	boolResult = ( document.Form1.textbox1.value != '' );
+	if ( ! boolResult ) 
+	{
+		alert( 'Don&amp;acute;t leave the field empty' );
+	}
+	return boolResult;
+} 
+__arrValidators.length ++; 
+__arrValidators[ __arrValidators.length - 1 ] = '__ValidatorRequired_textbox1()';
+&lt;/script&gt;
+&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;input type=&quot;text&quot; id=&quot;textbox1&quot; name=&quot;textbox1&quot; size=&quot;15&quot; value=&quot;teste&quot; /&gt;&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;select id=&quot;dropdownlist1&quot; name=&quot;dropdownlist1&quot; &gt;
+&lt;option value=&quot;0&quot; selected=&quot;selected&quot;&gt;item1&lt;/option&gt;
+&lt;option value=&quot;1&quot;&gt;item2&lt;/option&gt;
+&lt;option value=&quot;2&quot;&gt;item3&lt;/option&gt;
+&lt;option value=&quot;3&quot;&gt;item4&lt;/option&gt;
+&lt;option value=&quot;4&quot;&gt;item11.75043&lt;/option&gt;
+&lt;option value=&quot;5&quot;&gt;item11.29974&lt;/option&gt;
+&lt;option value=&quot;6&quot;&gt;item14.18834&lt;/option&gt;
+&lt;option value=&quot;7&quot;&gt;item15.80649&lt;/option&gt;
+&lt;option value=&quot;8&quot;&gt;item4.154439&lt;/option&gt;
+&lt;/select&gt;
+&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;&lt;input type=&quot;button&quot; id=&quot;button1&quot; name=&quot;button1&quot; value=&quot;OK&quot; onclick=&quot;_doPostBack( 'button1', 'click' )&quot; /&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;/form&gt;
+</pre>
+<p>And what changes when you click the &quot;OK&quot; button once? The page will 
+be submitted and the &quot;Hello World&quot; will show up. Another change is that 
+a new item will show up in the drop down list. And the second time you click the 
+&quot;OK&quot; button, a new item will be added and the last added item will remain 
+there. And every new click will result in a new accumulative item. The drop down 
+will have this face after a few clicks:</p>
+<pre>
+&lt;select id=&quot;dropdownlist1&quot; name=&quot;dropdownlist1&quot; &gt;
+&lt;option value=&quot;0&quot; selected=&quot;selected&quot;&gt;item1&lt;/option&gt;
+&lt;option value=&quot;1&quot;&gt;item2&lt;/option&gt;
+&lt;option value=&quot;2&quot;&gt;item3&lt;/option&gt;
+&lt;option value=&quot;3&quot;&gt;item4&lt;/option&gt;
+&lt;option value=&quot;4&quot;&gt;item11.75043&lt;/option&gt;
+&lt;option value=&quot;5&quot;&gt;item11.29974&lt;/option&gt;
+&lt;option value=&quot;6&quot;&gt;item14.18834&lt;/option&gt;
+&lt;option value=&quot;7&quot;&gt;item15.80649&lt;/option&gt;
+&lt;option value=&quot;8&quot;&gt;item4.154439&lt;/option&gt;
+&lt;/select&gt;
+</pre>
+<p>The secret is in this hidden field:</p>
+<pre>
+&lt;input type=&quot;hidden&quot; id=&quot;_VIEWSTATE&quot; name=&quot;_VIEWSTATE&quot; value=&quot;YnV0dG9uMSZuYW1lPWJ1dHRvbjEmdmFsdWU9T0smc3R5bGU9JmNsYXNzPSZ2aXNpYmxlPVRydWU8YnIgLz5sYWJlbDEmbmFtZT1sYWJlbDEmdmFsdWU9SGVsbG8rV29ybGQmc3R5bGU9JmNsYXNzPSZ2aXNpYmxlPVRydWU8YnIgLz5kcm9wZG93bmxpc3QxJm5hbWU9ZHJvcGRvd25saXN0MSZ2YWx1ZT0mc3R5bGU9JmNsYXNzPSZ2aXNpYmxlPVRydWUmbXVsdGlwbGU9RmFsc2Umcm93cz0xJmxpc3Q9aXRlbTElNDAlMjMlNDB2YWx1ZTElMjMlNDAlMjNpdGVtMiU0MCUyMyU0MHZhbHVlMiUyMyU0MCUyM2l0ZW0zJTQwJTIzJTQwdmFsdWUzJTIzJTQwJTIzaXRlbTQlNDAlMjMlNDB2YWx1ZTQlMjMlNDAlMjNpdGVtOCUyQzMxOTg1OSU0MCUyMyU0MHZhbHVlMiUyQzY0MjAyJTIzJTQwJTIzaXRlbTclMkM5NzA2MDElNDAlMjMlNDB2YWx1ZTElMkM3Mjc1NiUyMyU0MCUyM2l0ZW0yJTJDMzIzNzgxJTQwJTIzJTQwdmFsdWUwJTJDODM4MjMyOSUyMyU0MCUyM2l0ZW0wJTJDNTg1MTI5NSU0MCUyMyU0MHZhbHVlMiUyQzA5NDg3OCUyMyU0MCUyM2l0ZW0wJTJDMzY3NTY2JTQwJTIzJTQwdmFsdWU0JTJDODgyMDElMjMlNDAlMjNpdGVtNSUyQzc4MTE2NyU0MCUyMyU0MHZhbHVlNCUyQzA4ODE0OCUyMyU0MCUyM2l0ZW01JTJDMTg4OTM2JTQwJTIzJTQwdmFsdWU1JTJDMjU4NzI1PGJyIC8+Jm5hbWU9Rm9ybTEmcGF0aD11bmRlZmluZWQmaGlkZXB3ZD1UcnVlJmVuY29kZT0=&quot;&gt;
+</pre>
+<p>This data is managed by the Form component. It&acute;s called a Postback Serialization. 
+You remember that the first thing we do is instantiate all the elements we want 
+and register them in the Page elements queue. This queue is responsible to track 
+every element down, serialize it&acute;s state, print it in the page and, after 
+a submit, deserialize them back. Each element can serialize itself in the form 
+of a string in a special format (see more in &quot;Custom Elements&quot;). All 
+the elements are enveloped by the Page and encoded using the Base64 encoding technique. 
+After a submit (what we call a &quot;Postback Operation&quot;) it can retrieve 
+this hidden field and decode it back to a string. This string is parsed and each 
+element get&acute;s it&acute;s old value back. That&acute;s how the drop down 
+list can save all the new items added to it.</p>
+<p>Each element also have a CanSerialize property that is set to True by default. 
+Turning it off will make it static, which means that it&acute;s state will not 
+be serialized. This is useful when you have an element that doesn&acute;t change 
+it&acute;s state and so you can make the serialization data smaller by not including 
+unnecessary serialization data.</p>
+<p>Other structures that this framework already takes care of are:</p>
+<ol>
+<li><b>Strong passwords</b>: there&acute;s an option (on by default) that makes 
+a industrial standard 128 bit MD5 hash for every password field (the password 
+is hashed twice in this process) based on a challenge seed (stored in the hidden 
+&quot;_CHALLENGE&quot; field -- this field acts more or less like a public key). 
+As this is a hash it can&acute;t be decrypted so the user can submit the form 
+in plain text format thru the wire and no one in the middle of the way can get 
+the password. The server will get both the challenge seed and the Hash and is 
+it&acute;s work to go to the user database, re-hash the stored password with the 
+challenge seed and compare the result value with the hash the user sent. If the 
+hashes are identical then the password is valid. This is the best way to send 
+a password thru a non encrypted connection with 100% security of it&acute;s data 
+(of course, security deals with other more complicated issues but most of the 
+simple cases can be solved with this simple approach);</li>
+<li><b>Field Validation</b>: most of the time all submitted form passes thru some 
+kind of validation code. One usually need to check for empty fields, valid e-mails 
+or compare a password field with it&acute;s confirmation field, and so on. All 
+these kinds of validations are encapsulated in a set of Validation components. 
+You can instantiate them and connect them to any element that exposes a &quot;Value&quot; 
+property (more on Validator later);</li>
+<li><b>HTML rendering</b>: all HTML elements are rendered with XHTML in mind which 
+means that all components render XML compatible HTML. Some components accepts 
+both a style or a classname property so you can apply CSS to them. The programmer 
+doesn&acute;t need to write the HTML manually the only thing he must do is call 
+the &quot;Render&quot; method; </li>
+<li><b>Old-browser compatibility</b>: all HTML and javascript is rendered in a 
+way to be backward-compatible with HTML 3.2 and Javascript 1.1 browsers. The ValidatorRegularExpression 
+is the sole exception: if you have to use it it&acute;s better to turn off the 
+client-side verification and leave it to the server. Future browsers will benefit 
+also as all rendered HTML is based on XHTML and all javascript is based on the 
+ECMA version (again, with the exception of ValidatorRegularExpression).</li>
+</ol>
+<p>Now it&acute;s important to know what are the costs for this framework approach:</p>
+<ol>
+<li>All the components require intialization of objects, so there&acute;s a heavier 
+memory requirement than a more conventional approach with manual processing of 
+everything. But 99% of the cases will benefit with the improved maintenance, productivity 
+and the memory requirements can be almost ignored;</li>
+<li>The developers have to wipe out all the old know-how on building web forms 
+and learn everything from scratch, so the learning curve for a web developer that 
+never used a RAD based tool will be a little expensive but the results are worth 
+it as the code will become very homogeneous and easy to maintain;</li>
+<li>State serialization and events means more round trips and more data going 
+back and forth. You must optimize your web application to use as little serialization 
+as possible. As it&acute;s using a standard Form hidden field it means a limit 
+of 80kb of data -- what is huge -- but of course no one wants to receive/submit 
+80kb of data at every event as a textbox on change event so this is a little thing 
+to have in mind; although it will not be a problem in most cases.</li>
+</ol>
+<p>And the last thing for this introduction is to have some good practices and 
+naming conventions in mind (this is not required but is good for easy of maintenance):</p>
+<ol>
+<li>All components MUST be named, there&acute;s no exception. When you have too 
+many elements, the importance of naming convention will become obvious. The usual 
+good practice is to have the name of the element followed by it&acute;s description 
+using the camel case. For example, a button for a cancel operation could be named 
+&quot;<span class="code">buttonCancel</span>&quot; and a text box for password 
+could be named &quot;<span class="code">textboxPassword</span>&quot;.</li>
+<li>Another good idea is to have events named after it&acute;s element name and 
+it&acute;s event description separated by underscore. For example, the previous 
+button&acute;s on click event could be named as &quot;<span class="code">buttonCancel_OnClick</span>&quot; 
+and the previous textbox on change event could be &quot;<span class="code">textboxPassword_OnChange</span>&quot;.</li>
+<li>Although VBScript is not case-sensitive it&acute;s a good practice to use 
+solid casing. The best approach is the Hungarian notation and the camel casing. 
+So if you wrote &quot;textbox&quot; once, don&acute;t write &quot;textBox&quot; 
+or &quot;TextBox&quot; later.</li>
+<li>Try to enclose all operation inside a procedure. You will notice that the 
+code inside Page1_OnInit in the first example could be outside of that procedure 
+but as a good practice it&acute;s enclosed in a procedure and set as an event 
+handler for the Page element. You will also remember that the &quot;<span class="code">RenderBegin</span>&quot; 
+method must be the last thing to be called after the drawing of the HTML but in 
+the previous example there&acute;s a lot of code written right below RenderBegin. 
+This doesn&acute;t affect it because all the code is enclosed in procedures and 
+therefore are not called after RenderBegin. Enclosing operations makes for easier 
+to read code;</li>
+<li>If you have a long configuration for an element it&acute;s a good idea to 
+use the With ... End With block as in the first example. If the configuration 
+has no more than 2 or 3 commands, the you can skip this block.</li>
+</ol>
+<p class="subtitle"><a name="iwebpage"></a>WebForms - The IWebPage interface</p>
+<p>VBScript is not a complete OOP language. The only thing that it does support 
+is encapsulation but there&acute;s neither polymorphism nor inheritance, which 
+means that there&acute;s no way to either implement an interface or inherit a 
+parent object. So the only way to ensure that all components can talk to each 
+other in a solid way is to write the code with a stable and consistent structure. 
+In this case the Page component is build after this pseudo-interface called IWebPage. 
+Every new implementation will, therefore, follow this same interface:</p>
+<p></p>
+<pre>
+Class IWebPage
+	' set the OnLoad event handler
+	Property Let OnLoad( ByRef subRef )
+	End Property
+
+	' set the OnInit event handler
+	Property Let OnInit( ByRef subRef )
+	End Property
+
+	' set the OnTerminate event handler
+	Property Let OnTerminate( ByRef subRef )
+	End Property
+
+	' set the OnTerminate event handler
+	Public Property Let OnFileUpload( ByRef subRef )
+	End Property
+
+	' get/set the form name
+	Property Get FormName
+	End Property
+	Property Let FormName( str )
+	End Property
+
+	' get the form raw collection
+	Property Get Form
+	End Property
+
+	' get the returned Challenge Seed
+	Property Get ChallengeSeed
+	End Property
+
+	' set validator container
+	Property Get Validator
+	End Property
+
+	Property Let Validator( ByRef obj ) 
+	End Property
+	
+	' check all the registered validators
+	Property Get IsValid
+	End Property
+
+	' choose to transport hashed version of the password instead of plain-text
+	Property Get HidePassword
+	End Property
+	Property Let HidePassword( bool )
+	End Property
+	
+	' choose to make a binary encoded form for uploads
+	Property Get AllowUpload
+	End Property
+	Property Let AllowUpload( bool )
+	End Property
+
+	' get/set the uploaded files saving location
+	Property Get UploadPath
+	End Property
+	Property Let UploadPath( str )
+	End Property
+
+	' check if this is a form post back (result of a previous submit)
+	Property Get IsPostBack
+	End Property
+
+	' cancel deserialization and other post back event operation
+	Public Sub CancelPostBack
+	End Sub
+
+	' function called by the child objects
+	Public Function ChildSerializeNode( sName, sValue )
+	End Function
+
+	' persists all the elements currently registered objects
+	Private Function Serialize
+	End Function
+	
+	' wraps the object큦 properties
+	Public Sub SetProperty( strKey, strArg )
+	End Sub
+
+	' adds a new form elements
+	Public Sub Add( ByRef oElement, strName )
+	End Sub
+	
+	' returns an element based on it큦 name
+	Public Function Item( strName )
+	End Function
+
+	' loads the elements with the previous stored persistent data
+	' and trigger the current event
+	Public Sub Load
+	End Sub
+	
+	' prints the &lt;form&gt; element and the main javascript behaviors
+	Public Sub RenderBegin
+	End Sub
+	
+	' print the end of the &lt;form&gt; element
+	Public Sub RenderEnd
+	End Sub
+End Class
+</pre>
+<p>The properties are:</p>
+<ol>
+<li><span class="methodproperty">OnInit, OnLoad, OnTerminate and OnFileUpload 
+(set)<br>
+</span>those are event handler pointers. Their definitions are self-explained 
+in their name. OnInit is triggered before the Load method, OnLoad is triggered 
+right after it. OnTerminate takes place in the RenderEnd method and OnFileUpload 
+takes place after a submit where the user can choose what to do with the uploaded 
+files or leave it to the Page to handle it. All handlers must be passed thru the 
+VBScript &quot;GetRef&quot; procedure.</li>
+<li><span class="methodproperty">String FormName (get/set)<br>
+</span>This is a required property: the Page MUST have a name or nothing will 
+work properly;</li>
+<li><span class="methodproperty">clsCollection FormName (get)<br>
+</span>Allows the direct manipulation of the Form items thru the clsCollection 
+object (methods Item( index/key ), GetValue( index ), GetKey( index ) ). Must 
+be used very carefully (actually it&acute;s recommended to not be used);</li>
+<li><span class="methodproperty">String ChallengeSeed (get)<br>
+</span>Returns the challengeseed used by the client side of the password MD5 for 
+comparison purposes. Will be used in authentication algorithms;</li>
+<li><span class="methodproperty">IWebValidatorContainer Validator (get/set) </span><br>
+Binds to a ValidatorContainer (covered later). If the Form is supposed to have 
+a validation that a proper container must be linked here;</li>
+<li><span class="methodproperty">Bool IsValid (get)</span> <br>
+Return a boolean if the Validator property is properly set. It runs thru all the 
+validators in the ValidatorContainer and merges their results using the boolean 
+operator AND.</li>
+<li><span class="methodproperty">Bool AllowUpload (get/set)</span> <br>
+A boolean that tells if the Form supports uploads. If it does, the Page component 
+will take care of adding a multitype attribute to the form header;</li>
+<li><span class="methodproperty">String UploadPath (get/set)</span> <br>
+A string that indicates the default path where uploaded files will be saved. If 
+it&acute;s empty it will consider the location of the current page;</li>
+<li><span class="methodproperty">Bool IsPostBack (get)</span> <br>
+A boolean that indicates if this is the first time the page is called or if it&acute;s 
+the result of a user submit;</li>
+<li><span class="methodproperty">Bool CancelPostBack (get/set)</span> <br>
+A boolean that indicates if the Page can ignore PostBacks. Certain operations 
+as element initialization takes place only once and then the serialization takes 
+care of the element&acute;s state. If the application requires a clean refresh 
+of all the elements it can turn off the IsPostBack here so everything goes back 
+to their primary states;</li>
+</ol>
+<p>The methods are:</p>
+<ol>
+<li><span class="methodproperty">String ChildSerializeNode( String sName, String 
+sValue )</span><br>
+This method will envelope the property name and it&acute;s value in a format that 
+can be parsed back later. For rock solid serialization between all elements, every 
+element that implements the IWebElement (more on this later) must use this method 
+to serialize it&acute;s state;</li>
+<li><span class="methodproperty">String Serialize()</span><br>
+As all elements, the Page itself can serialize it&acute;s own state using the 
+same previous method;</li>
+<li>Void SetProperty( String strKey, String strArg )<br>
+It does the opposite of the first method: it receives a property name and a value 
+to be assigned to it. This is the deserialization method for the Page component;</li>
+<li><span class="methodproperty">Void Add ( IWebElement oElement, String strName 
+)</span><br>
+This is the hook method that receives any element that&acute;s implemented after 
+IWebElement, set it&acute;s Parent property to itself and it&acute;s Name property 
+for the content of the strName field;</li>
+<li><span class="methodproperty">IWebElement Item( String strKey )</span><br>
+queries the queue of elements for an element with the given name and returns it&acute;s 
+pointer;</li>
+<li> <span class="methodproperty">Void Load()</span><br>
+Handles the serialization and deserialization of all the elements, also takes 
+care of any triggered events and runs the OnInit and OnLoad events;</li>
+<li><span class="methodproperty">Void RenderBegin()</span><br>
+Prints the Form headers and all the supports as hidden form fields and javascripts 
+that takes care of submit the form and validate it&acute;s fields;</li>
+<li><span class="methodproperty">Void RenderEnd()</span><br>
+Prints the Form footer and triggers the OnTerminate event;<br>
+</li>
+</ol>
+<p class="subtitle"><a name="iwebelement"></a>WebForms - The IWebElement interface</p>
+<p>This documentation will describe the pseudo-interface &quot;IWebElement&quot; 
+first as all it&acute;s functionallity applies to the rest of the elements. Each 
+new custom element must be written with this interface in mind (in a full OOP 
+language we would refer to it as &quot;implementing this interface&quot;), which 
+means that everything that&acute;s here is necessary and therefore MUST BE in 
+all elements called &quot;WebElements&quot;.</p>
+<pre>
+Class IWebElement
+	' type of this object
+	Property Get IsType
+	End Property
+
+	' the required name of the object
+	Property Get Parent
+	End Property
+
+	Property Let Parent( ByRef refObj )
+	End Property
+
+	' get/set required name for this element
+	Property Get Name
+	End Property
+
+	Property Let Name ( str )
+	End Property
+
+	' get/set required name for this element
+	Property Get Value
+	End Property
+
+	Property Let Value ( str )
+	End Property
+	
+	' get/set if the element is visible
+	Property Get Visible
+	End Property
+
+	Property Let Visible ( bool )
+	End Property
+
+	' handles all events: called by the Page class
+	Public Sub EventHandler( sender, arguments )
+	End Sub
+	
+	' serializes the element using the parent ChildSerializeNode method
+	Public Function Serialize
+	End Function
+	
+	' called by the parent Page class and must be able to set
+	' all of it큦 own properties
+	Public Sub SetProperty( name, value )
+	End Sub
+	
+	' renders the HTML control in the page
+	Public Sub Render
+	End Sub
+End Class
+
+</pre>
+<p>So every WebElement has the following properties:</p>
+<ol>
+<li><span class="methodproperty">String IsType (get)</span><br>
+returns a string that defines it&acute;s type. For example, a Button element returns 
+&quot;button&quot; as it&acute;s type name;</li>
+<li><span class="methodproperty">IWebPage Parent (get/set)</span><br>
+When the element is registered in the Page element queue, this property is automatically 
+assigned. The parent of every element is it&acute;s Page container. Some private 
+procedures inside the element requires it</li>
+<li><span class="methodproperty">String Name (get/set)</span><br>
+Same case as the Parent property: it&acute;s assigned at the moment the element 
+is assigned to a Page container. All elements in a container must have unique 
+names so be careful not to assign the same name to 2 different elements;</li>
+<li><span class="methodproperty">String Value (get/set)</span><br>
+The serialization and deserialization processes requires that every element have 
+a Value property. Even lists have to have a single Value property, the implementation 
+is up to the developer;</li>
+<li><span class="methodproperty">Bool CanSerialize (get/set)</span><br>
+It&acute;s a boolean that defines if the element can serialize itself. If you 
+read the first part of this document that the flag used to optimize the size of 
+the state manager;</li>
+</ol>
+<p>The required methods are:</p>
+<ol>
+<li><span class="methodproperty">void EventHandler( String sender, String arguments 
+)</span><br>
+This is a necessary procedure that handled all the events of the particular element. 
+Even if the element has no events this procedure must be there with an empty body. 
+The Page Loader event will always look for this procedure on all elements;</li>
+<li><span class="methodproperty">String Serialize()</span><br>
+This procedure serializes all the static properties of the current element -- 
+which means that pointers to other objects are not serialized, for example, streams 
+for external files. This procedure must use the ChildSerializeNode in the Parent 
+object;</li>
+<li><span class="methodproperty">void SetProperty( String name, String value )</span><br>
+This is a single point of property setting. For example, if you have a &quot;Name&quot; 
+property there must be a handler in this procedure to set the &quot;Name&quot; 
+property thru something like Button1.SetProperty( &quot;name&quot;, &quot;button1&quot; 
+). This is absolutelly important for the deserialization process;</li>
+<li><span class="methodproperty">void Render()</span><br>
+After all the configuration this is probably the last method to be called. It 
+gathers all the properties together and renders the properly XHTML and optional 
+javascript codes.</li>
+</ol>
+<p>As every elements described from now on is a direct implementation of this 
+interface, they will not describe the same elements as Name and Render again. 
+Only the new elements will be described.</p>
+<p class="subtitle"><a name="button"></a>WebForms - Button</p>
+<p>A button is rendered as the standard &lt;input type=&quot;button&quot; /&gt; 
+form element. </p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnClick (set)</span><br>
+receives a procedure that is triggered when the current button is clicked</li>
+</ul>
+<p class="subtitle"><a name="label"></a>WebForms - Label</p>
+<p>This is not a form element but is important to encapsulate a simple label. 
+If a CSS style or class name is provided then the label is enclosed between a 
+&lt;span&gt;&lt;/span&gt; block. As it&acute;s static it doesn&acute;t have any 
+events to maintain backward-compatibility with old browsers</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+</ul>
+<p class="subtitle"><a name="textbox"></a>WebForms - TextBox</p>
+<p>A textbox is rendered as both a standard &lt;input type=&quot;text&quot; /&gt; 
+form field or a &lt;textarea&gt;&lt;/textarea&gt; block. It all depends on the 
+number of rows is defined.</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+<li><span class="methodproperty">Int MaxLength (get/set)</span><br>
+defines how much characters are allows in a single-lined field. This is not the 
+size of the field but it&acute;s capacity: this property can be bigger than the 
+physical length;</li>
+<li><span class="methodproperty">Int Columns (get/set)</span><br>
+this is the physical length of the field: it defines how long it is (the style 
+and class properties bypasses this property);</li>
+<li><span class="methodproperty">Int Rows (get/set)</span><br>
+the default is 1 rows, anything bigger sets this element as a textarea block;</li>
+<li><span class="methodproperty">Bool IsPassword (get/set)</span><br>
+it this is set to true then it bypasses the Rows property and set it back to 1, 
+also renders the field as a &lt;input type=&quot;password&quot; /&gt;</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnChange (set)</span><br>
+receives a procedure that is triggered when the value of the current field is 
+changed by the user client.</li>
+</ul>
+<p class="subtitle"><a name="dropdownlist"></a>WebForms - DropDownList</p>
+<p>This renders a standard HTML combo box with one or more lines and with multiple 
+or single selection.</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+<li><span class="methodproperty">Dictionary Items (get)</span><br>
+exposes the elements of the list thru a Dictionary object that can be easily managed 
+outside the element;</li>
+<li><span class="methodproperty">Int Columns (get/set)</span><br>
+this is the physical length of the field: it defines how long it is (the style 
+and class properties bypasses this property);</li>
+<li><span class="methodproperty">Int Rows (get/set)</span><br>
+the default is 1 rows, anything bigger sets this element as a textarea block;</li>
+<li><span class="methodproperty">Bool AllowMultiple (get/set)</span><br>
+allows the user to select more than one item in a list of multiple lines;</li>
+<li><span class="methodproperty">Int SelectedCount (get)</span><br>
+returns the number of items that were selected by the user</li>
+<li><span class="methodproperty">Int Count (get)</span><br>
+returns the number of items available in the Items dictionary</li>
+<li><span class="methodproperty">Array/String Value (get/set)</span><br>
+this property can receive a comma separated string and then convert it to an array 
+and also can return the array. This property holds the user selected items of 
+the list;</li>
+</ul>
+<p>Methods</p>
+<ul>
+<li><span class="methodproperty">String GetValue( Int index )</span><br>
+returns the value of the item in the position &quot;index&quot; in the Dictionary</li>
+<li><span class="methodproperty">String GetKey( Int index )</span><br>
+returns the key name of the item in the position &quot;index&quot; in the Dictionary</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnChange (set)</span><br>
+receives a procedure that is triggered when the user selects a new item in the 
+list. </li>
+</ul>
+<p class="subtitle"><a name="list"></a>WebForms - List</p>
+<p>This component groups a set of check boxes or radio items. If the developers 
+sets the AllowMultiple to True then it&acute;s a check box list, otherwise it&acute;s 
+a Radio box list. The developer can also choose the direction of this list to 
+be both vertical (line-braked) or horizontal.</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+<li><span class="methodproperty">Dictionary Items (get)</span><br>
+exposes the elements of the list thru a Dictionary object that can be easily managed 
+outside the element;</li>
+<li><span class="methodproperty">Bool AllowMultiple (get/set)</span><br>
+allows the user to select more than one item in a list of multiple lines;</li>
+<li><span class="methodproperty">Int SelectedCount (get)</span><br>
+returns the number of items that were selected by the user</li>
+<li><span class="methodproperty">Int Count (get)</span><br>
+returns the number of items available in the Items dictionary</li>
+<li><span class="methodproperty">Array/String Value (get/set)</span><br>
+this property can receive a comma separated string and then convert it to an array 
+and also can return the array. This property holds the user selected items of 
+the list;</li>
+<li><span class="methodproperty">Bool Vertical (get/set)</span><br>
+chooses the direction of the list.</li>
+</ul>
+<p>Methods</p>
+<ul>
+<li><span class="methodproperty">String GetValue( Int index )</span><br>
+returns the value of the item in the position &quot;index&quot; in the Dictionary</li>
+<li><span class="methodproperty">String GetKey( Int index )</span><br>
+returns the key name of the item in the position &quot;index&quot; in the Dictionary</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnChange (set)</span><br>
+receives a procedure that is triggered when the user selects a new item in the 
+list. </li>
+</ul>
+<p class="subtitle"><a name="fileupload"></a>WebForms - FileUpload</p>
+<p>A textbox is rendered as both a standard &lt;input type=&quot;text&quot; /&gt; 
+form field or a &lt;textarea&gt;&lt;/textarea&gt; block. It all depends on the 
+number of rows is defined.</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+<li><span class="methodproperty">Int MaxLength (get/set)</span><br>
+defines how much characters are allows in a single-lined field. This is not the 
+size of the field but it&acute;s capacity: this property can be bigger than the 
+physical length;</li>
+<li><span class="methodproperty">Int Size (get/set)</span><br>
+this is the physical length of the field: it defines how long it is (the style 
+and class properties bypasses this property);</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnChange (set)</span><br>
+receives a procedure that is triggered when the value of the current field is 
+changed by the user client. This event handler will be rarely used as this means 
+uploading the file twice if client-side validation is disabled: the onchange event 
+will submit the form, the server-side validation will validate the field and will 
+render the page again to user. When the user clicks the final submit button the 
+file will be uploaded all over again.</li>
+</ul>
+<p class="subtitle"><a name="image"></a>WebForms - Image</p>
+<p>This is a form element that mimics a submit button. If there</p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+defines a standard CSS string as &quot;font-family: Arial; font-size: 10pt&quot;. 
+It&acute;s completelly up to the developer to set this correctly;</li>
+<li><span class="methodproperty">String ClassName (get/set)</span><br>
+defines a CSS class name.</li>
+<li><span class="methodproperty">String ToolTip (get/set)</span><br>
+this is a tip that shows up to the user when the mouse stands over the image.</li>
+</ul>
+<p>Events</p>
+<ul>
+<li> <span class="methodproperty">OnClick (set)</span><br>
+receives a procedure that is triggered when the image is clicked</li>
+</ul>
+<p class="subtitle"><a name="hidden"></a>WebForms - Hidden</p>
+<p>This is probably the simpler element. It holds a simple non visual element. 
+As it doesn&acute;t need any special formatting nor events, then it simply implements 
+the base IWebElement interface and doesn&acute;t extends it.</p>
+<p>&nbsp;</p>
+<p class="subtitle"><a name="ivalidatorcontainer"></a>WebForms - The IValidatorContainer 
+interface</p>
+<p>This is the most valuable addition to the rather simpler &quot;Form Renderer&quot; 
+shown above. It provides the platform to validate the data that the user typed 
+in the form fields at the server-side and, optionally, at the client-side thru 
+javascript.</p>
+<p>This container it linked to the Page element thru it&acute;s Validator property. 
+This container provides the infra structure to hold other Validators and even 
+custom Validators that implements the IValidator interface, described later. </p>
+<pre>
+Class IValidatorContainer
+	' the required name of the object
+	Public Property Get Parent
+	End Property
+
+	Public Property Let Parent( ByRef refObj )
+	End Property
+
+	' verifies postback from a form
+	Public Property Get IsPostBack 
+	End Property
+
+	' return the form name
+	Public Property Get FormName 
+	End Property
+
+	' allows the form to be checked prior to a submit
+	Public Property Get IsClientSided
+	End Property
+
+	Public Property Let IsClientSided( bool )	
+	End Property
+
+	' dive thru all the validators and join the boolean results
+	Public Property Get IsValid
+	End Property
+
+	' add validators to the container
+	Public Sub Add( ByRef obj )
+	End Sub
+
+	' renders the error message if applicable
+	Public Sub ChildRender( boolInvalid, strStyle, strClass, strError )
+	End Sub
+
+End Class
+</pre>
+<p>Properties:</p>
+<ul>
+<li><span class="methodproperty">IWebPage Parent (get/set)</span><br>
+This is a link to the Page that is linked to this container. The Page&acute;s 
+property Validator takes care of filling this property up;</li>
+<li><span class="methodproperty">String FormName (get)</span><br>
+It gets the name of the parent Page component;</li>
+<li><span class="methodproperty">Bool IsPostBack (get)</span><br>
+It gets the result of the parent Page&acute;s IsPostBack property</li>
+<li><span class="methodproperty">Bool IsClientSided (get/set)</span><br>
+It draws client javascript when turned on. This allows for client-side field validation 
+prior to a submit. This is the best way to make less round trips, less form submits 
+and better user experience. The only drawback is that certain validators that 
+renders non-backward-compatible javascript can trouble the form for old-browsers 
+althought it&acute;s not exactly a problem for 90% of the cases;</li>
+<li><span class="methodproperty">Bool IsValid (get)</span><br>
+executes the validation of all the queued validators all at once;</li>
+</ul>
+<p>Methods:</p>
+<ul>
+<li><span class="methodproperty">void Add ( IValidator obj )</span><br>
+registers a new Validator to the container queue. It is triggered when the container&acute;s 
+IsValid property is called;</li>
+<li><span class="methodproperty">void ChildRender( Bool boolInvalid, String strStyle, 
+String strClass, String strError )</span><br>
+this is called by all the validators in the queue when the validation goes wrong 
+and it has to write an error message.</li>
+</ul>
+<p>The first example at the top of this document shows an example of validator 
+-- the ValidatorRequired one -- and you can have an idea on how it works.</p>
+<p class="subtitle"><a name="ivalidator"></a>WebForms - The IValidator interface</p>
+<p>All validators that can be added to the ValidatorContainer, described above, 
+must implement this interface.</p>
+<pre>
+Class IValidator
+	' the required name of the object
+	Public Property Get Parent
+	End Property
+	Public Property Let Parent( ByRef refObj )
+	End Property
+	
+	Public Property Let Control( ByRef obj )
+	End Property
+
+	Public Property Get IsOK
+	End Property
+	
+	Public Property Get ErrorMessage
+	End Property
+	Public Property Let ErrorMessage( str )
+	End Property
+	
+	Public Property Get Style
+	End Property
+	Public Property Let Style( str )
+	End Property
+
+	Public Property Get ClassName
+	End Property
+	Public Property Let ClassName( str )
+	End Property
+
+	' uses the parent render method
+	Public Sub Render
+	End Sub
+End Class
+</pre>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">IValidatorContainer Parent (get/set)</span><br>
+This property is set by the parent Container&acute;s Add method</li>
+<li><span class="methodproperty">IWebElement Control (get/set)</span><br>
+This is the control that will have it&acute;s value validated. Only an IWebElement 
+kind of control can be registered here;</li>
+<li><span class="methodproperty">Bool IsOK (get)</span><br>
+Makes the validation of the Control and returns True/False;</li>
+<li><span class="methodproperty">String ErrorMessage (get/set)</span><br>
+Defines the message that will be shown to the user in the case that the validation 
+fails;</li>
+<li><span class="methodproperty">String Style (get/set)</span><br>
+Defines a CSS style that will be applied to the error message;</li>
+<li><span class="methodproperty">String Class (get/set)</span><br>
+Defines a CSS class name that will be applied to the error message;</li>
+</ul>
+<p>Methods</p>
+<ul>
+<li><span class="methodproperty">void Render()</span><br>
+This method must be called in the precisely position where you want it to render 
+the error message in the case of a failure in the validation. It is called inside 
+the HTML part of the code.</li>
+</ul>
+<p>The next validators that will be described implements this same interface so 
+only the extended structures will be detailed.</p>
+<p class="subtitle"><a name="validatorrequired"></a>WebForms - ValidatorRequired</p>
+<p>This is the standard validator for for non-empty fields. If the value of the 
+registered control is empty then the validator returns False. As it&acute;s the 
+simpler validator of all it only implements the IValidator interface and doesn&acute;t 
+have any extended structures.</p>
+<p class="subtitle"><a name="validatorcompare"></a>WebForms - ValidatorCompare</p>
+<p>This validator compares the value of a control to another control or a static 
+value. The extensions allows the registration of the second control or the static 
+value. </p>
+<p>Properites</p>
+<ul>
+<li><span class="methodproperty">IWebElement ControlToValidate (set)</span><br>
+adds the control that will be used for comparison</li>
+<li><span class="methodproperty">String ValueToValidate (get/set)</span><br>
+adds the static value that will be used for comparison</li>
+<li><span class="methodproperty">String Operator</span><br>
+defines the nature of the comparison. The valid strings are: 
+<ul>
+<li>&quot;equal&quot;, &quot;not equal&quot;, &quot;greater than&quot;, &quot;smaller 
+than&quot;, &quot;greater than equal&quot;, &quot;smaller than equal&quot;</li>
+</ul>
+<p>&nbsp;</p>
+</li>
+</ul>
+<p class="subtitle"><a name="validatorregularexpression"></a>WebForms - ValidatorRegularExpression</p>
+<p>This validator can execute a Regular Expression (Regex) to the value of the 
+registrated control. </p>
+<p>Properties</p>
+<ul>
+<li><span class="methodproperty">String RegularExpression (get/set)</span><br>
+This is the regular expression that will be used against the control&acute;s value</li>
+</ul>
+<p>Methods</p>
+<ul>
+<li><span class="methodproperty">String Pattern( String strName )</span><br>
+This method return standard regex, for example, instead of having to remember 
+that the regex for e-mail is .*\@.*\..* it&acute;s easier to write Pattern( &quot;email&quot; 
+). The available pre-prepared regex are: 
+<ol>
+<li><b>email</b><br>
+anything that looks like &quot;username@domain.com&quot;;</li>
+<li><b>integer</b><br>
+signed or unsigned integer;</li>
+<li><b>double</b><br>
+signed or unsigned double. Must Replace the string &quot;decimalchar&quot; for 
+a dot or a comma or the Regex will not be valid. Ex: Replace( .Pattern( &quot;double&quot; 
+), &quot;decimalchar&quot;, &quot;.&quot; );</li>
+<li><b>currency</b></li>
+<li>signed or unsigned currency (double with group and digit separator as 1,000.00 
+without $ symbol). Must replace the strings &quot;groupchar&quot; and &quot;digitchar&quot; 
+as the group and digit separators and &quot;digits&quot; for the amount of digits 
+that&acute;s desired;</li>
+<li><b>currencyAbs</b><br>
+same as before but it doesn&acute;t allow for digits (ex: 2,500, not 2,500.00) 
+so only requires &quot;groupchar&quot; to be replaced;</li>
+<li><b>dateMDY</b><br>
+validates anything with the format 99/99/99 or 99/99/9999 (ex: 12/31/2001 or 12/31/01)<br>
+</li>
+<li><b>dateYMD</b></li>
+<li>validates anything with the format 99/99/99 or 9999/99/99 (ex: 2001/12/31 
+or 01/12/31)</li>
+</ol>
+</li>
+</ul>
+<hr>
+<a name="disclaimer"></a>
+<p>Author: Fabio Makoto Akita (akita@psntv.com)<br>
+10/08/2001 </p>
+<p>License: this documentation and the components &quot;Encoders&quot; and &quot;WebForms&quot; 
+are still not legally registered but the availability will be through the GPL 
+(GNU Protection License) model. So anyone can freely use, modify and distribute 
+the components as long as it follows the GPL basic 4 freedoms (<a href="http://www,gnu.org">http://www.gnu.org</a>).</p>
+</html>

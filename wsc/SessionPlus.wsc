@@ -1,0 +1,516 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<component>
+
+<registration 
+	progid="SessionPlus" 
+	description="Encapsulates a replacement for ASPSession with support for Load Balanced Servers"
+	version="1.0.0.0"
+	/>
+
+<public>
+	<method name="CreateInstance">
+		<parameter name="strObject" />
+	</method>
+</public>
+
+<implements type="ASP" />
+<script language="VBScript">
+<![CDATA[   
+Const constSession = "__SESSIONKEYPLUS"
+
+Public Function CreateInstance( strObject )
+	strObject = Trim( LCase( strObject ) )
+	Select Case strObject
+	Case "session"
+		Set CreateInstance = New SessionPlus
+	Case "sqldataadaptor"
+		Set CreateInstance = New SQLDataAdaptor
+	End Select
+End Function
+
+'
+'	Replaces the built-in ASP Session object
+'	Advantages:
+'	- does not consume local resources
+'	- allows true Web Farms because the user doesn´t have to get back to the
+'		same server all the time, which means that it allows for true load balancing
+'		with users accessing different servers but still having a solid session
+'	- expiration customizable in the level of the page
+'
+'	Requirements
+'	- MD5.asp (Class MD5)
+'	- RDBMS database access and the following table structure (if using SQLDataAdaptor)
+'	- Base64.asp (Class Base64)
+'	- a Data Adaptor Class (more on this at the end of the SessionPlus implementation)
+'
+'	create table tbSessionPlus (
+'		userid	varchar2( 40 ) not null,
+'		keyname	varchar2( 100 ) not null,
+'		value	varchar2( 8000 ) not null,
+'		expiration	date	not null
+'	)
+'
+Class SessionPlus
+	Private strUserID
+	Private objEncoders
+	Private objBase64
+	Private objItems
+	Private dtExpire
+	Private dtInitialized
+	Private objDataAdaptor
+	Private boolCommit
+
+	' get the MD5 based UserID
+	Public Property Get UserID : UserID = strUserID : End Property
+
+	' get/set timeout period for the session (in minutes)
+	Public Property Get Timeout : Timeout = Abs( DateDiff( "n", dtInitialized, dtExpire ) ) : End Property
+	Public Property Let Timeout( intTimeout )
+		If IsNumeric( intTimeout ) Then
+			on error resume next
+			intTimeout = CInt( intTimeout )
+			If Err.number <> 0 Then
+				intTimeout = 20
+			End If
+			on error goto 0
+			dtExpire = DateAdd( "n", intTimeout, dtInitialized )
+			Response.Cookies( constSession ).ExpiresAbsolute = dtExpire
+		End If
+	End Property
+
+	' get/set an external data adaptor that exposes a Save method that receives the
+	' current data
+	Public Property Let DataAdaptor( ByRef obj )
+		If IsObject( obj ) Then
+			Set objDataAdaptor = obj
+			obj.Parent = Me
+		End If
+	End Property
+
+	' total items
+	Public Property Get Count : Count = objItems.Count : End Property
+	
+	' constructor
+	Private Sub Class_Initialize
+		boolCommit = False
+		dtExpire = DateAdd( "n", 20, Now )	' expires in 20 minutes
+		dtInitialized = Now
+		Set objDataAdaptor = Nothing
+
+		Set objEncoders = Server.CreateObject( "Encoders" )
+		Set objBase64 = objEncoders.CreateInstance( "Base64" )
+		Set objItems = Server.CreateObject( "Scripting.Dictionary" )
+	End Sub
+	
+	' destructor - clean up
+	Private Sub Class_Terminate
+		Set objBase64 = Nothing
+		Set objItems = Nothing
+		Set objDataAdaptor = Nothing
+		Set objEncoders = Nothing
+	End Sub
+
+	' get an item (thru it´s absolute position in the queue or thru it´s key name)
+	Public Function getItem( key )
+		If IsNumeric( key ) Then
+			on error resume next
+			key = CInt( key )
+			If Err.number = 0 Then
+				If key >= objItems.Count Then
+					Exit Function
+				End If
+		
+				Dim arrTokens
+				arrTokens = objItems.Items
+				getItemIndex = arrTokens( key )
+			End If
+			on error goto 0
+		Else
+			If objItems.Exists( key ) Then
+				getItem = objBase64.Decode( objItems( key ) )
+			End If
+		End If
+	End Function
+	
+	' set/edit a new item
+	Public Sub setItem( key, strValue )
+		If IsNumeric( key ) Then
+			on error resume next
+			key = CInt( key ) 
+			If Err.number = 0 Then
+				If intIndex >= objItems.Count Then
+					Exit Sub
+				End If
+		
+				Dim arrkeys
+				arrkeys = objItems.Keys
+				objItems( arrKeys( key ) ) = strValue
+				boolCommit = True
+			End If
+			on error goto 0
+		Else
+			If Not objItems.Exists( key ) Then
+				objItems.Add key,  objBase64.Encode( strValue )
+			Else
+				objItems( key ) = objBase64.Encode( strValue )
+			End If
+			boolCommit = True
+		End If
+	End Sub
+
+	' get the key in the given index position
+	Public Function getKey( intIndex )
+		If intIndex >= objItems.Count Then
+			Exit Function
+		End If
+		
+		Dim arrkeys
+		arrkeys = objItems.Keys
+		getKey = arrKeys( intIndex )
+	End Function
+	
+	' check a key
+	Public Function hasItem( strKey )
+		hasItem = objItems.Exists( strKey )
+	End Function
+	
+	' expires all items
+	Public Sub RemoveAll
+		objItems.RemoveAll
+	End Sub
+	
+	' load previously saved user data
+	Public Function Load
+		Load = False
+		If Not IsObject( objDataAdaptor ) or objDataAdaptor Is Nothing Then
+			Exit Function
+		End If
+
+		' check if the user already has an ID, otherwise generate a new one based on MD5
+		Dim dtTmp, objMD5
+		on error resume next
+		strUserID = Trim( Request.Cookies( constSession ) )
+		If Err.number <> 0 Then
+			strUserID = ""
+		End If
+		on error goto 0
+		If strUserID = "" and objDataAdaptor.IsReady Then
+			Set objMD5 = objEncoders.CreateInstance( "MD5" )
+			dtTmp = Now
+			Randomize
+			Do 
+				strUserID = Request.ServerVariables( "REMOTE_ADDR" ) & Request.ServerVariables( "CONTENT_LENGTH" ) & _
+					Hex( Rnd * 30000 ) & Day( dtTmp ) & Month( dtTmp ) & Year( dtTmp ) & Hour( dtTmp ) & Minute( dtTmp ) & Second( dtTmp )
+				strUserID = objMD5.MakeDigest( strUserID )
+			Loop Until Not objDataAdaptor.Exists( strUserID )
+			Set objMD5 = Nothing
+		End If
+
+		If strUserID <> "" Then
+			' try to write in the cookie header
+			on error resume next
+			Response.Cookies( constSession ) = strUserID
+			Response.Cookies( constSession ).Path = "/"
+			on error goto 0
+		
+			With objDataAdaptor
+				.Items = objItems
+				
+				Load = .Retrieve()
+			End With
+		End If
+	End Function
+	
+	' saves the current user data
+	Public Function Commit
+		' only run a commit transaction if some data were modified, otherwise do nothing
+		If Not boolCommit Then
+			Commit = True
+			Exit Function
+		End If
+
+		Commit = False
+		If Not IsObject( objDataAdaptor ) or objDataAdaptor Is Nothing Then
+			Exit Function
+		End If
+
+		With objDataAdaptor
+			.Expire = dtExpire
+			.Items = objItems
+			
+			Commit = .Fetch()
+		End With
+	End Function
+End Class
+
+'
+'	Implements a default Data Adaptor for SQL
+'	Any Class can be an adaptor as far as it implements the following interface:
+'
+'	Interface IDataAdaptor
+'		Public Property String UserID (get/set)
+'		Public Property Scripting.Dictionary Items (get/set) 
+'		Public Property Date Expire (get/set)
+'
+'		Public Bool Retrieve
+'		Public Bool Fetch
+'	End Interface
+'
+Class SQLDataAdaptor
+	Private dtExpire
+	Private objItems
+	Private objParent
+	Private strTableName
+	Private strConnection
+	Private objConnection
+	Private boolOracle
+
+	' get/set the Session container
+	Public Property Let Parent( ByRef obj )
+		If IsObject( obj ) Then
+			Set objParent = obj
+		End If
+	End Property
+
+	' get/set a Dictionary object from the caller object
+	Public Property Get Items : Set Items = objItems : End Property
+	Public Property Let Items( ByRef obj ) 
+		If IsObject( obj ) Then
+			Set objItems = obj
+		End If
+	End Property
+
+	' get/set expiration date for the current values (must be set before Commit)
+	Public Property Get Expire : Expire = dtExpire : End Property
+	Public Property Let Expire( dtTmp )
+		If IsDate( dtTmp ) Then
+			dtExpire = dtTmp
+		End If
+	End Property
+
+	' get/set the table name
+	Public Property Get TableName : TableName = strTableName : End Property
+	Public Property Let TableName( str ) : strTableName = str : End Property
+
+	' get/set the connection string
+	Public Property Get ConnectionString : ConnectionString = strConnection : End Property
+	Public Property Let ConnectionString( str ) : strConnection = str : End Property
+
+	' get/set a connection object
+	Public Property Get Connection : Set Connection = objConnection : End Property
+	Public Property Let Connection( ByRef obj )
+		If obj Is Nothing Then
+			Exit Property
+		End If
+		Set objConnection = obj
+	End Property
+
+	' get/set whether it´s Oracle or SQL Server
+	Public Property Get IsOracle : IsOracle = boolOracle : End Property
+	Public Property Let IsOracle( bool ) 
+		If bool Then
+			boolOracle = True
+		Else
+			boolOracle = False
+		End If
+	End Property
+
+	' check if the connection do exists
+	Public Property Get IsReady : IsReady = OpenConnection() : End Property
+
+	' constructor
+	Private Sub Class_Initialize
+		boolOracle = True
+		strTableName = "tbSessionPlus"
+		strConnection = "DSN=pubs;UID=sa;PWD="
+		Set objConnection = Nothing
+	End Sub
+	
+	' destructor
+	Private Sub Class_Terminate
+		Call CloseConnection()
+	End Sub
+	
+	' opens a new Database connection and overrides the current (if any)
+	Private Function OpenConnection
+		OpenConnection = False	
+		If Not ( objConnection Is Nothing ) Then
+			' connection already opened
+			OpenConnection = True
+			Exit Function
+		End If
+		If strConnection = "" Then
+			' neither connection is opened nor there´s a connection string
+			Exit Function
+		End If
+		' opens up
+		on error resume next
+		Set objConnection = Server.CreateObject( "ADODB.Connection" )
+		objConnection.Open strConnection
+		If Err.number <> 0 Then
+			Set objConnection = Nothing
+			Exit Function
+		End If
+		on error goto 0
+		OpenConnection = True
+	End Function
+	
+	' explicitly closes a database connection
+	Private Sub CloseConnection
+		Set objConnection = Nothing
+	End Sub
+	
+	' check if the given UserID already exists
+	Public Function Exists( strID )
+		Exists = False
+		If Not OpenConnection() Then
+			' avoids a possible infinite loop
+			Exit Function
+		End If
+		If strID = "" Then
+			Exists = True
+			Exit Function
+		End If
+
+		Dim strSQL, oRS
+		strSQL = "select count(*) cnt from " & strTableName & " where userid = '" & strID & "' and expiration > "
+		If boolOracle Then
+			strDateFormat = "TO_DATE( '%date', 'MM/DD/YYYY HH:MI:SS PM' )"
+		Else
+			strDateFormat = "'%date'"
+		End If
+		strSQL = strSQL &  Replace( strDateFormat, "%date", FormatDate( Now ) )
+
+		Set oRS = Server.CreateObject( "ADODB.RecordSet" )
+		oRS.Open strSQL, objConnection, 3, 3
+
+		' retrieve all values
+		on error resume next
+		If Not oRS.EOF Then
+			If CLng( oRS( "cnt" ) ) > 0 Then
+				Exists = True
+			End If
+		End If
+		oRS.Close
+		on error goto 0
+
+		Set oRS = Nothing
+	End Function
+
+	' go down to the database and query the saved user data
+	Public Function Retrieve
+		Retrieve = False
+		If Not OpenConnection() or Not IsObject( objParent ) or objParent.UserID = "" Then
+			Exit Function
+		End If
+
+		Dim strSQL, oRS
+		strSQL = "select keyname, value from " & strTableName & " where userid='" & objParent.UserID & "' and expiration >= "
+		If boolOracle Then
+			strSQL = strSQL & "SYSDATE"
+		Else
+			strSQL = strSQL & "GetDate()"
+		End If
+
+		Set oRS = Server.CreateObject( "ADODB.RecordSet" )
+		oRS.Open strSQL, objConnection, 3, 3
+
+		' retrieve all values
+		on error resume next
+		Dim strKey, strValue
+		objItems.RemoveAll
+		While Not oRS.EOF
+			strKey = oRS( "keyname" )
+			strValue = oRS( "value" )
+			Call objItems.Add( strKey, strValue )
+			oRS.MoveNext
+		Wend
+		oRS.Close
+
+		If Err.number = 0 Then
+			Retrieve = True
+		End If
+		on error goto 0
+
+		Set oRS = Nothing
+	End Function
+	
+	' save the users data
+	Public Function Fetch
+		Fetch = False
+		If objItems.Count <= 0 or Not OpenConnection() or Not IsObject( objParent ) or objParent.UserID = "" = "" Then
+			Exit Function
+		End If
+
+		Dim strSQL, strDateFormat, strTmp, strKey, strSQLDelete
+
+		strSQLDelete = "delete from " & strTableName & " where userid = '" & objParent.UserID & "'"		
+		strSQL = "insert into " & strTableName & " ( userid, keyname, value, expiration ) values ( '%userid', '%key', '%value', %expiration )"
+		If boolOracle Then
+			strDateFormat = "TO_DATE( '%date', 'MM/DD/YYYY HH:MI:SS PM' )"
+		Else
+			strDateFormat = "'%date'"
+		End If
+		
+		If Not IsDate( dtExpire ) Then
+			dtExpire = Now
+		End If
+
+		' formats expiration date
+		strSQL = Replace( strSQL, "%userid", objParent.UserID )
+		strSQL = Replace( strSQL, "%expiration", Replace( strDateFormat, "%date", FormatDate( dtExpire ) ) )
+		
+		' make all the inserts in a single transaction
+		objConnection.BeginTrans
+		on error resume next
+		' delete all data from the database as it will be re-written 
+		objConnection.Execute strSQLDelete
+		For Each strKey in objItems
+			strTmp = Replace( strSQL, "%key", strKey )
+			strTmp = Replace( strTmp, "%value", objItems( strKey ) )
+			
+			objConnection.Execute strTmp
+		Next
+		If objConnection.Errors.Count > 0 Then
+			objConnection.RollBackTrans
+		Else
+			objConnection.CommitTrans
+			Fetch = True
+		End If
+		on error goto 0
+	End Function
+	
+	' Fetch method helper
+	Private Function FormatInt( strInt, intRange )
+		If strInt < intRange Then
+			FormatInt = "0" & strInt
+		Else
+			FormatInt = strInt
+		End If
+	End Function
+	
+	Private Function FormatDate( dtDate )
+		Dim strDay, strMonth, strYear, strHour, strMinute, strSecond, strAMPM, intHour
+		intHour	= Hour( dtDate )
+		If intHour > 12 Then
+			intHour = intHour - 12
+			strAMPM = "PM"
+		ElseIf intHour = 12 Then
+			strAMPM = "PM"
+		Else
+			strAMPM = "AM"
+		End If
+		strDay		= FormatInt( Day( dtDate ), 10 )
+		strMonth	= FormatInt( Month( dtDate ), 10 )
+		strYear		= FormatInt( Year( dtDate ), 100 )
+		strHour		= FormatInt( intHour, 10 )
+		strMinute	= FormatInt( Minute( dtDate ), 10 )
+		strSecond	= FormatInt( Second( dtDate ), 10 )
+			
+		FormatDate = strMonth & "/" & strDay & "/" & strYear & " " & strHour & ":" & strMinute & ":" & strSecond & " " & strAMPM
+	End Function
+End Class
+]]>
+</script>
+
+</component>

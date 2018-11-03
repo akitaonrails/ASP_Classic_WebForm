@@ -1,0 +1,265 @@
+<html>
+<title>Documentation: SessionPlus</title>
+<link rel="stylesheet" href="documentation.css">
+<p class="title">User&acute;s Guide to Session Plus</p>
+<p class="subtitle">Contents</p>
+<ol>
+<li><a href="#purposes">Purposes of a new Session model</a></li>
+<li><a href="#package">The SessionPlus Package</a></li>
+<li><a href="#idataadaptor">The IDataAdaptor Interface</a></li>
+<li><a href="#sqldataadaptor">The SQLDataAdaptor Component</a></li>
+<li><a href="#session">The Session Component</a></li>
+<li><a href="#disclaimer">Disclaimer</a></li>
+</ol>
+<p class="subtitle"><a name="purposes"></a>Purposes of a new Session model</p>
+<p>One of the most handy features of the built-in ASP COM components is the Session. 
+It allows for user&acute;s data persistence with almost zero effort from the developer. 
+The drawback to this component is that it was made with a bad design and therefore 
+it doesn&acute;t scale.</p>
+<p>The problem is that it saves the data in local physical files. So in a load 
+balanced topology scenario, if a user goes to Server 1, some data is saved there. 
+When he requests the next page the load balancing system will redirect him to 
+a Server 2 that doesn&acute;t have this user&acute;s previous data so the persistence 
+is lost.</p>
+<p>The workaround for this situation is to ignore the built-in Session and develop 
+a new one with scalability in mind, for example, saving it in a central storage 
+server that can hold the data in files or in a database but the important thing 
+is that all Web Servers must point to this single centralized point of storage. 
+So, no matter where the user is redirected: each server will know exactly where 
+to retrieve the necessary data.</p>
+<p>This is whas SessionPlus provides: the replacement for Session. It&acute;s 
+not a 100% perfect system but can hold 99% of the situations pretty well. Plus, 
+it adds the notion of DataAdaptors. There is already a default Adaptor called 
+SQLDataAdaptor that stores the data in a pre-defined database table. If there&acute;s 
+the need for a more specific kind of storage, for example, to save the state in 
+XML files, the developer can implement the IDataAdaptor interface (described below) 
+and bind it with the SessionPlus component. As long as it correctly implements 
+the IDataAdaptor interface it will know what to do. It&acute;s a flexibility for 
+situations where the default database table lacks some very specific feature. 
+But again, 99% of the situations will probably fit well with the standard approach.</p>
+<p class="subtitle"><a name="package"></a>The SessionPlus Package</p>
+<p>The first object to be instantiated is the SessionPlus package. It has a method 
+CreateInstance that acts as a factory. With this object you can create the Session 
+and SQLDataAdaptor objects. Here&acute;s a complete example of creation:</p>
+<pre>
+Set SessionFactory = Server.CreateObject( "SessionPlus" )
+Set objSession = SessionFactory.CreateInstance( "Session" )
+Set objAdaptor = SessionFactory.CreateInstance( "SQLDataAdaptor" )
+objSession.DataAdaptor = objAdaptor	' binds the 2 objects together
+</pre>
+<p class="subtitle"><a name="idataadaptor"></a>The IDataAdaptor Interface</p>
+<p>As explained before, this model allows for a flexible data manager system. 
+You can implement any custom component on top of this interface. As long as it 
+implements the same properties and methods, it can be linked to the Session component 
+and therefore be used transparently to send and retrieve data to any kind of data 
+source.</p>
+<pre>
+Class IDataAdaptor
+	' get the Session container
+
+	Public Property Let Parent( ByRef obj )
+	End Property
+
+	' get/set a Dictionary object from the caller object
+	Public Property Get Items
+	End Property
+	Public Property Let Items( ByRef obj ) 
+	End Property
+
+	' get/set expiration date for the current values (must be set before Commit)
+	Public Property Get Expire
+	End Property
+	Public Property Let Expire( dtTmp )
+	End Property
+
+	' check if the connection do exists
+	Public Property Get IsReady : IsReady = OpenConnection() : End Property
+	
+	' check if the given UserID already exists
+	Public Function Exists( strID )
+	End Function
+
+	' go down to the database and query the saved user data
+	Public Function Retrieve
+	End Function
+	
+	' save the users data
+	Public Function Fetch
+	End Function
+End Class
+</pre>
+<p>Properties</p>
+<ol>
+<li><span class="methodproperty">Session Parent (get)</span><br>
+It will be assigned at the time the Session container binds to the Adaptor;</li>
+<li><span class="methodproperty">Dictionary Items (get/set)</span><br>
+Allows the assignment of an external Dictionary. In the case of a Retrieve operation 
+this will be the save point. In the case of a Fetch operation this will be the 
+source point;</li>
+<li><span class="methodproperty">DateTime Expire (get/set)</span><br>
+This is the expiration date that will be assigned to the current set of session 
+values;</li>
+<li><span class="methodproperty">Bool IsReady (get)</span><br>
+Verifies if the Adaptor is ready to do Retrieve or Fetch operations.</li>
+</ol>
+<p>Methods</p>
+<ol>
+<li><span class="methodproperty">Bool Exists( String strID )</span><br>
+Check if the given UserID already exists. This method helps the Session container 
+when it&acute;s generating a new UserID;</li>
+<li><span class="methodproperty">Bool Retrieve</span><br>
+Once the Adaptor is correctly connected to the Session Container, it can query 
+the storage and load the data of the current user;</li>
+<li><span class="methodproperty">Bool Fetch</span><br>
+Once the Adaptor is correctly connected to the Session Container, it can save 
+the current user data to a storage.</li>
+</ol>
+<p class="subtitle"><a name="sqldataadaptor"></a>The SQLDataAdaptor Component</p>
+<p>This is the default adaptor that implements the interface described above. 
+There are a few particular settings that it requires: as this is an SQL Database-based 
+Adaptor it will require some database configuration in order to work. A working 
+example would be:</p>
+<pre>
+' (1) instantiate objects
+Set SessionFactory = Server.CreateObject( "SessionPlus" )
+Set objSession = SessionFactory.CreateInstance( "Session" )
+<b>Set objAdaptor = SessionFactory.CreateInstance( "SQLDataAdaptor" )</b>
+
+' (2) configure the adaptor
+<b>objAdaptor.ConnectionString = "DSN=PMIDB;UID=pmiuser;PWD=pmiuser"
+objAdaptor.IsOracle = False</b>
+
+' (3) configure the container and bind the adaptor to it
+<b>objSession.DataAdaptor = objAdaptor</b>
+objSession.Load
+
+' (4) make operations in the session
+objSession.setItem( "test", "value" )
+Response.Write objSession.getItem( "test" )
+
+' (5) finish the session (or data will not be stored) and clean up memory
+objSession.Commit
+Set SessionFactory = Nothing
+</pre>
+<p>Steps (1), (2), (3) must be always in the very beggining of the page and the 
+step (5) must be in the very end of the page. Anyway, the operations -- as in 
+(4) -- must be necessarily between those steps. Actually the important thing is 
+that the operations goes after a Load operation and before the Commit. (the container 
+code will be detailed in the next section).</p>
+<p>The extended properties are:</p>
+<ol>
+<li><span class="methodproperty">String Tablename (get/set)</span><br>
+the name of the table that has the default structure (shown below)</li>
+<li><span class="methodproperty">String ConnectionString (get/set)</span><br>
+the string used to open the connection. For example: &quot;DSN=pubs;UID=sa;PWD=sa&quot;</li>
+<li><span class="methodproperty">ADODB.Connection Connection (get/set)</span><br>
+instead of providing a string to open a new connection, you can assign an already 
+opened connection;</li>
+<li><span class="methodproperty">Bool IsOracle (get/set)</span><br>
+Oracla and MS SQL Server have some differences so this property allows for the 
+correct construction of queries and commands.</li>
+</ol>
+<p>The default table is called tbSessionPlus (although you can change it thru 
+the TableName property). The default structure for this table is as follows:</p>
+<pre>create table tbSessionPlus (
+	userid	varchar2( 40 )  not null,
+	keyname	varchar2( 100 ) not null,
+	value	text            not null,
+	expiration	date	    not null
+)
+</pre>
+<p>And the user specified in the ConnectionString must have select, insert and 
+delete grants to this table or the operations will fail. It&acute;s a good practice 
+to have a separated user that only controls this table. A custom component could 
+require a different structure when the system needs more information to be stored, 
+but this one is the smallest structure to offer a minimun of control. You can 
+extend it but try not to cut pieces off.</p>
+<p>It&acute;s also a good idea to set a scheduled script that cleans old sessions 
+out along with the transactional log once in a while (once a week or every noon). 
+The following command can erase the old sessions (for Oracle and MS Server):</p>
+<pre>
+(Oracle)    delete from tbSessionPlus where expiration < SYSDATE
+(SQLServer) delete from tbSessionPlus where expiration < GetDate()
+</pre>
+<p>Remember that user data is private (this is an axiom, don&acute;t question), 
+and although it&acute;s always stored in a Base64 encoded format (human unreadable), 
+it&acute;s always a good practice to wipe out every temporary user information 
+like this as it can become a single-point-of-failure in the case an external agent 
+(as a hacker) can gain access to this data. Another good reason is that this table 
+eats up considerable amount of space so cleaning both old sessions and transactional 
+log once in a while won&acute;t hurt.</p>
+<p>Last detail: the .Fetch operation depends on a transactional operation as each 
+saved value is a separated insert command. You have to ensure that all the values 
+are stored at once, without errors -- or nothing is stored at all, or we could 
+have an inconsistent operation. So never turn transactions off in the database 
+you choose to hold the session data.</p>
+<p class="subtitle"><a name="session"></a>The Session Component</p>
+<p>Finally, the Session Container. This component aggregates the value manager 
+operators and allows an external Adaptor that implements IDataAdaptor to be used, 
+as explained above. Even though all the Adaptor details was explained above, the 
+bottom line is that the developer will often use it directly. If you look at the 
+working example above you will see that all the work with the Adaptor is in instantiating 
+it, giving it correct connection data and linking it to the container. Then all 
+the operations will be taken care by the Session component and everything can 
+be done thru the interface exposed here.</p>
+<p>The working example is shown in the section above, so let&acute;s simply list 
+the exposed properties and methods of this component:</p>
+<p>Properties:</p>
+<ol>
+<li><span class="methodproperty">String UserID (get)</span><br>
+allows the component to expose the users current read-only ID.</li>
+<li><span class="methodproperty">Int Timeout (get/set)</span><br>
+this property controls the expiration of the current Session. It allows the input 
+of an integer number that expresses times in the format of minutes. So if you 
+do .Timeout = 10, it means 10 minutes since the object was instantiated. If you 
+never set this property, the session will expire instantly after the user closes 
+he&acute;s browser, otherwise the session will persist until the expiration timeout 
+is reached or an explicit command of abandon is released;</li>
+<li><span class="methodproperty">IDataAdaptor DataAdaptor (set)</span><br>
+binds the container with an external Adaptor as explained before;</li>
+<li><span class="methodproperty">Int Count (get)</span><br>
+return how many itens are stored in the current Session</li>
+</ol>
+<p>Methods</p>
+<ol>
+<li><span class="methodproperty">String getItem( String/Int key )</span><br>
+retrieve a stored value through it&acute;s key name or through it&acute;s position 
+in the list. For example, both .getItem( &quot;test&quot; ) or .getItem( 0 ) will 
+work for the example shown in the previous section;</li>
+<li><span class="methodproperty">void setItem( String/Int key, String strValue 
+)</span><br>
+as the previous method, it allows to insert an item through a new key name or 
+change an existing value through it&acute;s key name or it&acute;s position in 
+the list. So, the value created in the previous example can be updated using both 
+.setItem( &quot;test&quot;, &quot;new value&quot; ) or .setItem( 0, &quot;new 
+value&quot; )<br>
+A <b>VERY IMPORTANT</b> point to remember is that Sessions only accept discrete 
+values, so never ever try to store references to objects. For example: never try 
+to store a Recordset object in a Session. (This is true for both this SessionPlus 
+package and the built-in ASP Session);</li>
+<li><span class="methodproperty">String getKey( Int intIndex )</span><br>
+retrieves the name of the key name of the item in the given position. The previous 
+example would allow for .getKey( 0 ) to return the key name &quot;test&quot;;</li>
+<li><span class="methodproperty">Bool hasItem( String strKey )</span><br>
+checks if the given key name exists in the current list of items;</li>
+<li><span class="methodproperty">void RemoveAll</span><br>
+explicitly allows to clean up all the data in the user&acute;s current Session;</li>
+<li><span class="methodproperty">void Load</span><br>
+this method will do the job of querying the Adaptor and retrieve any persisted 
+data of the current user. If this is the first time the user opened the current 
+Session than it also creates a new UserID;</li>
+<li><span class="methodproperty">Bool Commit</span><br>
+after all operations are made with the current user&acute;s session data then 
+you have to call Commit. It will order the Adaptor to store the current data. 
+If nothing was changed (all the data was used for read-only purposes) then the 
+Adaptor will never be asked to store anything.</li>
+</ol>
+<hr>
+<a name="disclaimer"></a> 
+<p>Author: Fabio Makoto Akita (akita@psntv.com)<br>
+10/10/2001 </p>
+<p>License: this documentation and the package &quot;SessionPlus&quot; is still 
+not legally registered but the availability will be through the GPL (GNU Protection 
+License) model. So anyone can freely use, modify and distribute the components 
+as long as it follows the GPL basic 4 freedoms (<a href="http://www,gnu.org">http://www.gnu.org</a>).</p>
+</html>
